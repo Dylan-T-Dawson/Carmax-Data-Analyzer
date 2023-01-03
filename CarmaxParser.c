@@ -14,14 +14,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
-
 
 #define MAXCHAR 200 //Maximum length for a line
 #define ARRAYSIZE 1250 //Size of each array
 #define DATASIZE 200000 //Size of the data.
 
-//The following constants are to reference specific variables from the lines
+//The following constants are to reference specific variables from the lines read in from the file.
 #define price 0
 #define appraisal_offer 1
 #define online_appraisal_flag 2
@@ -53,26 +51,29 @@
 #define fuel_capacity_appraisal 28
 #define market 29
 
-//Struct used to make it easier to store pointers to an array of strings.
+//The conditional statement is used to define the number of arrays needed to hold the data given the size of the dataset and the size of the arrays.
+//The modulus is used to determine if there needs to be an additional array to hold some number of elements < ARRAYSIZE. 
+#if DATASIZE % ARRAYSIZE == 0
+    #define numArrays (DATASIZE / ARRAYSIZE)
+#elif
+    #define numArrays (DATASIZE / ARRASIZE + 1)
+#endif
+
+//The following struct is used to allow for the storing of pointers to arrays of strings in the master array, which is described hereafter. 
 typedef struct arrOfStrings{
     char arr[ARRAYSIZE][MAXCHAR];
 }arrOfStrings;
 
-//Function to get ith element from a string of elements separated by commas.
+//Function to get the ith element from a string of elements separated by commas.
 void getIth(char* list, char* retVal, int max, int index);
 
-//Gets the price from a range string.
+//Gets the price from a string representing a range of prices "$5k to $10k" would return $5k.
 int getPrice(char* range);
 
-double maxInRow(double arr[], int rows, int columns, int rowNum);
+//Returns the index associated with the maximum element in a given row from the passed in array
+int maxInRow(double arr[], int rows, int columns, int rowNum);
 
 int main() {
-
-    //Calculates the number of arrays needed to store the data.
-    int numArrays = DATASIZE / ARRAYSIZE;
-    if(DATASIZE % ARRAYSIZE != 0){
-        numArrays++;
-    }
 
     arrOfStrings* masterArray[numArrays]; //Array of pointers to arrays of strings. All data will be referenced through this array once it is filled.
 
@@ -80,10 +81,11 @@ int main() {
     fp = fopen("ShowcaseDataWinter2023.csv", "r"); //ADD ERROR CHECKING
 
     //Gets and stores the title, which exceeds the normal MAXCHAR set length.
+    //The title is not needed, but the file pointer must be moved passe it.
     char title[MAXCHAR*3];
     fgets(title, MAXCHAR*3, fp);
 
-    //Fills each element in the master array with a pointer
+    //Fills each element in the master array with a pointer to an array of strings, which are filled in turn with lines from the data file.
     for(int w = 0; w < numArrays; w++){    
         masterArray[w] = malloc(sizeof(arrOfStrings)); //masterArray[0] is now a pointer to allocated memory that can have its dereference set equal to the value of an arrOfStrings struct.
         arrOfStrings toSetDef; //Struct that the dereference of an element of masterArray will be set to.
@@ -94,7 +96,7 @@ int main() {
             strcpy(toSetDef.arr[i], buf);
             i++;
         }
-        *masterArray[w] = toSetDef; //Sets an element of the masterArray's dereference (the memory previously allocated) equal to the value of the struct.
+        *masterArray[w] = toSetDef; //Sets an element of the masterArray's dereference (the memory previously allocated) equal to the value of toSetDef.
     }
 
 
@@ -112,8 +114,10 @@ int main() {
     //We will first test using just the appraisal price to predict the purchase price.
     //Step 1 is to stratify all of the data into arrays.
 
-    //Appraisal is from 0 to 40k+ and price is from 0 to 15 to 70k plus so the array is 9 * 15 = 135 in dimensions. Some not used. Could use more complicated algorithm.
-    const int APROW = 9;
+    /*Appraisal is from 0 to 40k+ and price is from 0 to 70k plus so the array is 9 * 15 = 135 in dimensions. Some values will not be used. 
+    This is because the price variable has a range from $0k to $15k that is not broken down into $5k increments as is the rest of the data.
+    A more complex method could possibly be used to save space, but unless this improvement is needed, the current implementation is sufficient. */
+    const int APROW = 9; //AP stands for Appraisal VS Price
     const int APCOLUMN = 15;
     double priceArr[9 * 15]={0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -124,10 +128,13 @@ int main() {
                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    //In the above, the first row holds the data for appraisal of 0-5 etc...
+    //In the above, the first row holds the price data for an appraisal of 0-5 etc...
+    //The columns the appraisal data for prices of 0-5, 5-10, etc...
     
+    //Vaues to be used in the following loop.
     int val1;
     int val2;
+    //The following loop populates the price array based on the value of a the appraisal price and price from each line in the data set, which are stored in the master array.
     for(int i = 0; i < numArrays; i++){
         for(int j = 0; j < ARRAYSIZE; j++){
             char buf1[MAXCHAR];
@@ -136,26 +143,22 @@ int main() {
             getIth(masterArray[i]->arr[j], buf2, MAXCHAR, price);
             val1 = getPrice(buf1);
             val2 = getPrice(buf2);
+            //The following throws an error if the value of either the current appraisal offer or price is not within the range specified in the data.
             if(val1 > 70 || val1 < 0 || val2 > 70 || val2 < 0){
-
                 printf("\nError\n The line is %s", masterArray[i]->arr[j]);
                 printf("The values are: val1: %d, val2: %d\n", val1, val2);
                 printf("The strings are buf1: %s, buf2: %s\n", buf1, buf2);
                 printf("The value of getPrice is val1: %d, val2: %d\n", getPrice(buf1), getPrice(buf2));
-                break;
+                exit(1);
             }
+            //Adds one to the correct index in the price array.
             priceArr[(val2/5) + (val1/5) * APCOLUMN]++;
 
         }
         
     } 
-    int sum = 0;
-    for(int i = 0; i < APCOLUMN * APROW; i++){
-        sum += priceArr[i];
-    }
-    //printf("Sum: %d", sum);
     
-    //We will now transform the array to hold the weights. Each row should total to 1.
+    //We will now transform the array to hold percentages. Each row should total to 1.
     double rowTot;
     for(int i = 0; i < APROW; i++){
         rowTot = 0;
@@ -166,11 +169,6 @@ int main() {
             priceArr[i*APCOLUMN + j] = priceArr[i*APCOLUMN+j] / rowTot;
         }
     }
-    /*
-    for(int i = 0; i < APCOLUMN * APROW; i++){
-        printf("i: %d, value: %f\n ", i, priceArr[i]);
-    }
-    */
 
     //Now lets write a practice predictor
     int valO;
@@ -196,8 +194,8 @@ int main() {
             }
             //printf("NumCorrect: %d, PriceGuess: %d, Val2: %d,\n", numCorrect, priceGuess, valT);
         }
-        
      }
+
      printf("Predicted price correctly %f%% of the time.", (double)numCorrect/DATASIZE * 100);
      //We have achieved 25% accuracy at predicting the price of the vehicle.
    
@@ -210,7 +208,6 @@ int main() {
     return 0;
 }
 
-//Returns the ith element of a comma separate list which is stored in a string.
 void getIth(char* list, char* retVal, int max, int index){
     int cur = 0;
     while(index != 0){
@@ -230,7 +227,6 @@ void getIth(char* list, char* retVal, int max, int index){
     return;
 }
 
-//Returns a numeric value based on the passed in price string.
 int getPrice(char* range){
     char priceStr[3];
     int index = 1;
@@ -243,7 +239,7 @@ int getPrice(char* range){
     return index;
 }
 
-double maxInRow(double arr[], int rows, int columns, int rowNum){
+int maxInRow(double arr[], int rows, int columns, int rowNum){
     double max = 0;
     int index;
     for(int i = 0; i < columns; i++){
